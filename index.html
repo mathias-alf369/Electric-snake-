@@ -1,4 +1,4 @@
-<!-- ELECTRIC_SNAKE_GITHUB_CLEAN_MUSIC_MASTER_V1 -->
+<!-- ELECTRIC_SNAKE_SINGLE_GITHUB_FIXED_V1: trophies menu + mp3 music control fixed -->
 <!--
 ELECTRIC_SNAKE_MODULAR_CLEAN_FINAL_V1
 
@@ -552,7 +552,7 @@ button:hover{
             <div class="final-menu-buttons">
               <button type="button" class="final-menu-btn" data-final-open="finalPlay">▶ Start spil</button>
               <button type="button" class="final-menu-btn" data-final-open="finalDaily">📅 Daglige challenges</button>
-              <button type="button" class="final-menu-btn" data-final-open="finalTrofæer">🏆 Trofæer</button>
+              <button type="button" class="final-menu-btn" data-final-open="finalTrophies">🏆 Trofæer</button>
               <button type="button" class="final-menu-btn" data-final-open="finalSound">🔊 Lyd</button>
               <button type="button" class="final-menu-btn" data-final-open="finalGem">💾 Gem</button>
               <button type="button" class="final-menu-btn" id="languageToggleBtn" data-no-translate="1">
@@ -592,7 +592,7 @@ button:hover{
             </div>
           </div>
 
-          <div class="final-menu-screen" id="finalTrofæer">
+          <div class="final-menu-screen" id="finalTrophies">
             <button type="button" class="final-back" data-final-open="finalHome">← Tilbage</button>
             <div class="final-card">
               <h3>🏆 Trofæer</h3>
@@ -5928,13 +5928,13 @@ drawHazardGlow();
       renderDifficultyMenu(); renderLevelMenu(); renderShop(); renderSelectedSkinNameClean(); updateUI();
     }
     if(id === 'finalDaily') finalRenderDailies();
-    if(id === 'finalTrophies'){
+    if(id === 'finalTrophies' || id === 'finalTrofæer'){
       checkTrophies(); renderTrophies();
       const src = $('trophyList');
       const dst = $('finalTrophyList');
       if(src && dst) dst.innerHTML = src.innerHTML;
     }
-    if(id === 'finalSave') finalSetSaveStatus('');
+    if(id === 'finalSave' || id === 'finalGem') finalSetSaveStatus('');
   }
 
   function finalSetSaveStatus(msg){
@@ -7440,6 +7440,170 @@ function showDailyPopup(text, reward){
 })();
 
 </script>
+
+<script>
+/* SINGLE_GITHUB_FIXED_V1 - robust mp3 music + trophy menu fix */
+(function(){
+  'use strict';
+
+  function $(id){ return document.getElementById(id); }
+
+  function getLang(){
+    try{ return localStorage.getItem('electric-snake-language-v1') === 'en' ? 'en' : 'da'; }
+    catch(e){ return 'da'; }
+  }
+
+  function musicLabel(isPlaying){
+    const en = getLang() === 'en';
+    if(en) return isPlaying ? '🎵 Music: On' : '🎵 Music: Off';
+    return isPlaying ? '🎵 Musik: Til' : '🎵 Musik: Fra';
+  }
+
+  function audio(){
+    const a = $('bgMusic');
+    if(!a) return null;
+    a.loop = true;
+    a.preload = 'auto';
+    a.src = './slimeyfox-immortal-arcade-487328.mp3';
+    return a;
+  }
+
+  function desiredVolume(){
+    try{
+      const ui = Number(localStorage.getItem('electric-snake-audio-volume-ui') || 70) / 100;
+      return Math.max(0, Math.min(1, ui * 0.55));
+    }catch(e){
+      return 0.38;
+    }
+  }
+
+  function updateMusicButton(){
+    const btn = $('realMusicToggleBtn');
+    const a = audio();
+    if(!btn || !a) return;
+    btn.textContent = musicLabel(!a.paused && !a.muted);
+  }
+
+  async function startMusic(){
+    const a = audio();
+    if(!a) return false;
+    try{
+      a.muted = false;
+      a.volume = desiredVolume();
+      await a.play();
+      updateMusicButton();
+      return true;
+    }catch(e){
+      console.warn('Music cannot start until the user clicks/taps the page.', e);
+      updateMusicButton();
+      return false;
+    }
+  }
+
+  function stopMusic(){
+    const a = audio();
+    if(!a) return;
+    try{ a.pause(); }catch(e){}
+    updateMusicButton();
+  }
+
+  function toggleMusic(){
+    const a = audio();
+    if(!a) return;
+    if(a.paused || a.muted) startMusic();
+    else stopMusic();
+  }
+
+  function addMusicButton(){
+    if($('realMusicToggleBtn')) return;
+    const soundCard = document.querySelector('#finalSound .final-card');
+    if(!soundCard) return;
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'realMusicToggleBtn';
+    btn.className = 'secondary';
+    btn.style.marginTop = '10px';
+    btn.textContent = musicLabel(false);
+    btn.onclick = function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      toggleMusic();
+      return false;
+    };
+
+    const tip = document.createElement('p');
+    tip.className = 'tips';
+    tip.textContent = getLang() === 'en'
+      ? 'Background music starts after clicking the button or starting the game.'
+      : 'Baggrundsmusik starter efter klik på knappen eller når spillet startes.';
+
+    soundCard.appendChild(btn);
+    soundCard.appendChild(tip);
+    updateMusicButton();
+  }
+
+  function patchGameStart(){
+    ['startBtn','toggleBtn','restartBtn'].forEach(function(id){
+      const btn = $(id);
+      if(!btn || btn.__realMusicPatched) return;
+      btn.__realMusicPatched = true;
+      btn.addEventListener('click', function(){
+        setTimeout(startMusic, 0);
+      }, true);
+    });
+  }
+
+  function renderFinalTrophies(){
+    try{
+      if(typeof checkTrophies === 'function') checkTrophies();
+      if(typeof renderTrophies === 'function') renderTrophies();
+
+      const src = $('trophyList');
+      const dst = $('finalTrophyList');
+      if(src && dst){
+        dst.innerHTML = src.innerHTML || '<p class="tips">Ingen trofæer vist endnu.</p>';
+      }
+    }catch(e){
+      console.warn('Could not render final trophies', e);
+    }
+  }
+
+  function patchFinalMenuButtons(){
+    document.querySelectorAll('[data-final-open]').forEach(function(btn){
+      if(btn.__trophyMusicPatch) return;
+      btn.__trophyMusicPatch = true;
+      btn.addEventListener('click', function(){
+        const target = btn.getAttribute('data-final-open');
+        setTimeout(function(){
+          if(target === 'finalTrophies' || target === 'finalTrofæer') renderFinalTrophies();
+          if(target === 'finalSound') { addMusicButton(); updateMusicButton(); }
+        }, 0);
+      }, true);
+    });
+  }
+
+  function init(){
+    addMusicButton();
+    patchGameStart();
+    patchFinalMenuButtons();
+    renderFinalTrophies();
+    updateMusicButton();
+    setTimeout(function(){ addMusicButton(); patchGameStart(); patchFinalMenuButtons(); updateMusicButton(); }, 300);
+    setTimeout(function(){ addMusicButton(); patchGameStart(); patchFinalMenuButtons(); updateMusicButton(); }, 1000);
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  }else{
+    init();
+  }
+
+  window.electricSnakeStartRealMusic = startMusic;
+  window.electricSnakeToggleRealMusic = toggleMusic;
+})();
+</script>
+
 </body>
 
 </html>
