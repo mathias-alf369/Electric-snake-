@@ -7996,6 +7996,272 @@ function showDailyPopup(text, reward){
 })();
 </script>
 
+
+<script>
+/* SINGLE_GITHUB_AUTOSAVE_HARD_FIX_V3
+   Adds aggressive autosave checkpoints:
+   - after earning coins
+   - after buying/equipping skins
+   - when opening menu/back buttons
+   - before page hide/unload
+   - periodically while playing
+*/
+(function(){
+  'use strict';
+
+  const SNAP = 'electric-snake-full-save-snapshot-v3';
+  const COIN_AUTH = 'electric-snake-authority-coins-v2';
+  const OWNED_AUTH = 'electric-snake-authority-owned-skins-v2';
+  const EQUIP_AUTH = 'electric-snake-authority-equipped-skin-v2';
+
+  const COIN_KEYS = [
+    'electric-snake-authority-coins-v2',
+    'electric-snake-authority-coins-v1',
+    'electric-snake-clean-coins-v1',
+    'electric-snake-simple-coins-v2',
+    'electric-snake-coins',
+    'electric-snake-v3-coins',
+    'electric-snake-total-coins',
+    'electric-snake-coin-balance'
+  ];
+
+  const OWNED_KEYS = [
+    'electric-snake-authority-owned-skins-v2',
+    'electric-snake-authority-owned-skins-v1',
+    'electric-snake-clean-owned-skins-v1',
+    'electric-snake-clean-owned-skins-v2',
+    'electric-snake-owned-skins'
+  ];
+
+  function st(){ return window.localStorage || window.__ES_STORAGE__; }
+
+  function get(k, f){
+    try{ const v = st().getItem(k); return v == null ? f : v; }
+    catch(e){ return f; }
+  }
+
+  function set(k, v){
+    try{ st().setItem(k, String(v)); }catch(e){}
+    try{
+      if(window.__ES_STORAGE__ && window.__ES_STORAGE__ !== st()){
+        window.__ES_STORAGE__.setItem(k, String(v));
+      }
+    }catch(e){}
+  }
+
+  function jget(k, f){
+    try{ const raw = st().getItem(k); return raw ? JSON.parse(raw) : f; }
+    catch(e){ return f; }
+  }
+
+  function jset(k, v){
+    try{ st().setItem(k, JSON.stringify(v)); }catch(e){}
+    try{
+      if(window.__ES_STORAGE__ && window.__ES_STORAGE__ !== st()){
+        window.__ES_STORAGE__.setItem(k, JSON.stringify(v));
+      }
+    }catch(e){}
+  }
+
+  function coins(v){
+    const n = Number(v);
+    if(!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.floor(n));
+  }
+
+  function skinIds(){
+    try{
+      const ids = (Array.isArray(SKINS) ? SKINS : []).map(s => s && s.id).filter(Boolean);
+      if(!ids.includes('neon')) ids.unshift('neon');
+      return ids;
+    }catch(e){ return ['neon']; }
+  }
+
+  function cleanOwned(list){
+    const valid = skinIds();
+    let owned = Array.isArray(list) ? list : ['neon'];
+    owned = owned.filter(id => typeof id === 'string' && valid.includes(id));
+    owned = Array.from(new Set(owned));
+    if(!owned.includes('neon')) owned.unshift('neon');
+    return owned;
+  }
+
+  function readCoins(){
+    let c = coins(get(COIN_AUTH, 0));
+    try{
+      if(typeof state !== 'undefined') c = Math.max(c, coins(state.coins || 0));
+    }catch(e){}
+    return c;
+  }
+
+  function writeCoins(c){
+    c = coins(c);
+    COIN_KEYS.forEach(k => set(k, c));
+    try{ if(typeof state !== 'undefined') state.coins = c; }catch(e){}
+    const h = document.getElementById('coins');
+    if(h) h.textContent = String(c);
+    const m = document.getElementById('menuCoins');
+    if(m) m.textContent = String(c);
+    return c;
+  }
+
+  function readOwned(){
+    let pool = [];
+    OWNED_KEYS.forEach(k => {
+      const v = jget(k, null);
+      if(Array.isArray(v)) pool.push(...v);
+    });
+    try{
+      if(typeof state !== 'undefined' && Array.isArray(state.ownedSkins)) pool.push(...state.ownedSkins);
+    }catch(e){}
+    return cleanOwned(pool.length ? pool : ['neon']);
+  }
+
+  function writeOwned(owned){
+    owned = cleanOwned(owned);
+    OWNED_KEYS.forEach(k => jset(k, owned));
+    try{ if(typeof state !== 'undefined') state.ownedSkins = owned.slice(); }catch(e){}
+    return owned;
+  }
+
+  function readEquipped(){
+    const owned = readOwned();
+    const eq = get(EQUIP_AUTH, get('electric-snake-equipped-skin', 'neon'));
+    return owned.includes(eq) ? eq : 'neon';
+  }
+
+  function writeEquipped(eq){
+    const owned = readOwned();
+    eq = owned.includes(eq) ? eq : 'neon';
+    set(EQUIP_AUTH, eq);
+    set('electric-snake-equipped-skin', eq);
+    set('electric-snake-clean-equipped-skin-v1', eq);
+    try{ if(typeof state !== 'undefined') state.equippedSkin = eq; }catch(e){}
+    return eq;
+  }
+
+  function saveSnapshot(){
+    const snap = {
+      coins: readCoins(),
+      owned: readOwned(),
+      equipped: readEquipped(),
+      best: get('electric-snake-v3-best', '0'),
+      bestEndless: get('electric-snake-endless-best', '0'),
+      language: get('electric-snake-language-v1', 'da'),
+      t: Date.now()
+    };
+    jset(SNAP, snap);
+    return snap;
+  }
+
+  function restoreSnapshotIfBetter(){
+    const snap = jget(SNAP, null);
+    if(!snap) return;
+
+    const currentCoins = readCoins();
+    const snapCoins = coins(snap.coins);
+
+    // Restore owned/equipped always from snapshot if snapshot has more owned skins.
+    const currentOwned = readOwned();
+    const snapOwned = cleanOwned(snap.owned || []);
+    if(snapOwned.length > currentOwned.length){
+      writeOwned(snapOwned);
+    }
+
+    if(snap.equipped) writeEquipped(snap.equipped);
+
+    // For coins: restore only upward. Purchase logic already writes lower coins + owned,
+    // so after a purchase snapshot will carry the lower correct coin value.
+    if(snapCoins > currentCoins){
+      writeCoins(snapCoins);
+    }
+  }
+
+  function hardSave(){
+    restoreSnapshotIfBetter();
+
+    const c = readCoins();
+    const owned = readOwned();
+    const eq = readEquipped();
+
+    writeCoins(c);
+    writeOwned(owned);
+    writeEquipped(eq);
+    saveSnapshot();
+
+    try{
+      if(typeof electricSnakeEconomyHardSync === 'function') electricSnakeEconomyHardSync();
+    }catch(e){}
+
+    return {coins:c, owned, equipped:eq};
+  }
+
+  function wrap(name){
+    const old = window[name];
+    if(typeof old !== 'function' || old.__autosaveV3) return;
+
+    const wrapped = function(){
+      const result = old.apply(this, arguments);
+      setTimeout(hardSave, 0);
+      setTimeout(hardSave, 200);
+      setTimeout(hardSave, 1000);
+      return result;
+    };
+    wrapped.__autosaveV3 = true;
+    window[name] = wrapped;
+  }
+
+  function bindButtons(){
+    document.querySelectorAll('button,[data-final-open]').forEach(btn => {
+      if(btn.__autosaveClickV3) return;
+      btn.__autosaveClickV3 = true;
+      btn.addEventListener('click', function(){
+        setTimeout(hardSave, 0);
+        setTimeout(hardSave, 500);
+      }, true);
+    });
+  }
+
+  function init(){
+    restoreSnapshotIfBetter();
+    hardSave();
+
+    wrap('buyOrEquipSkinV3');
+    wrap('renderShop');
+    wrap('showMenu');
+    wrap('resetGame');
+    wrap('retryLevel');
+    wrap('setGameOver');
+    wrap('saveCoins');
+    wrap('saveCoinsV10');
+    wrap('saveSkins');
+    wrap('saveSkinEconomyV3');
+    wrap('updateUI');
+
+    bindButtons();
+    setInterval(function(){
+      bindButtons();
+      hardSave();
+    }, 1500);
+
+    window.addEventListener('pagehide', hardSave);
+    window.addEventListener('beforeunload', hardSave);
+    document.addEventListener('visibilitychange', function(){
+      if(document.visibilityState === 'hidden') hardSave();
+      else setTimeout(hardSave, 100);
+    });
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  }else{
+    init();
+  }
+
+  window.electricSnakeHardSaveNow = hardSave;
+})();
+</script>
+
 </body>
 
 </html>
