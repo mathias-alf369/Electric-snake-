@@ -1,4 +1,4 @@
-<!-- ELECTRIC_SNAKE_SINGLE_GITHUB_FIXED_V1: trophies menu + mp3 music control fixed -->
+<!-- ELECTRIC_SNAKE_CLEAN_MASTER_V2: stable base after coin save fix -->
 <!--
 ELECTRIC_SNAKE_MODULAR_CLEAN_FINAL_V1
 
@@ -973,47 +973,30 @@ button:hover{
 
 
   // ============================================================
-  // COIN SAVE FIX ONLY V10
-  // Stable coin persistence. Does not touch menu/start flow.
+  // TRUE_CLEAN_MASTER_V1 COIN SAVE
+  // New isolated coin key. Does not read old broken coin saves.
   // ============================================================
 
-  const COIN_SAVE_KEY_V10 = 'electric-snake-coins';
-  const SIMPLE_COIN_SAVE_KEY_V10 = 'electric-snake-simple-coins-v2';
+  const TRUE_COIN_KEY_V1 = 'electric-snake-true-clean-coins-v1';
 
-  function readCoinNumberV10(key){
-    const n = Number(window.__ES_STORAGE__.getItem(key));
+  function cleanCoinNumberTrueV1(value){
+    const n = Number(value);
     return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
   }
 
   function loadCoinsV10(){
     try{
-      const keys = [
-        SIMPLE_COIN_SAVE_KEY_V10,
-        COIN_SAVE_KEY_V10,
-        'electric-snake-v3-coins',
-        'electric-snake-total-coins',
-        'electric-snake-coin-balance'
-      ];
-
-      let best = 0;
-      keys.forEach(key => {
-        best = Math.max(best, readCoinNumberV10(key));
-      });
-
-      state.coins = best;
-      mirrorCoinsV10(best);
+      state.coins = cleanCoinNumberTrueV1(window.__ES_STORAGE__.getItem(TRUE_COIN_KEY_V1) || 0);
+      mirrorCoinsV10(state.coins);
     }catch(e){}
   }
 
   function mirrorCoinsV10(value){
     try{
-      const coins = Math.max(0, Math.floor(Number(value) || 0));
+      const coins = cleanCoinNumberTrueV1(value);
       state.coins = coins;
 
-      // One balance mirrored to every system that still exists in the old file.
-      window.__ES_STORAGE__.setItem(SIMPLE_COIN_SAVE_KEY_V10, String(coins));
-      window.__ES_STORAGE__.setItem(COIN_SAVE_KEY_V10, String(coins));
-      window.__ES_STORAGE__.setItem('electric-snake-v3-coins', String(coins));
+      window.__ES_STORAGE__.setItem(TRUE_COIN_KEY_V1, String(coins));
 
       const coinEl = document.getElementById('coins');
       if(coinEl) coinEl.textContent = String(coins);
@@ -1023,7 +1006,7 @@ button:hover{
 
       return coins;
     }catch(e){
-      return Number(value || 0);
+      return cleanCoinNumberTrueV1(value || 0);
     }
   }
 
@@ -5928,13 +5911,13 @@ drawHazardGlow();
       renderDifficultyMenu(); renderLevelMenu(); renderShop(); renderSelectedSkinNameClean(); updateUI();
     }
     if(id === 'finalDaily') finalRenderDailies();
-    if(id === 'finalTrophies' || id === 'finalTrofæer'){
+    if(id === 'finalTrophies'){
       checkTrophies(); renderTrophies();
       const src = $('trophyList');
       const dst = $('finalTrophyList');
       if(src && dst) dst.innerHTML = src.innerHTML;
     }
-    if(id === 'finalSave' || id === 'finalGem') finalSetSaveStatus('');
+    if(id === 'finalSave') finalSetSaveStatus('');
   }
 
   function finalSetSaveStatus(msg){
@@ -6579,75 +6562,20 @@ function showDailyPopup(text, reward){
     }
 </script>
   <script>
-/* Electric Snake MODULAR_CLEAN_FINAL_V1 - shop.js
-
-   Shop-styring:
-   - Coins bevares fra eksisterende coin-keys.
-   - Skin-ejerskab bruger en ny ren key, så gamle ødelagte saves ikke følger med.
-   - Ejede skins kan kun tilføjes ved køb.
-   - At vælge et andet skin omskriver/fjerner aldrig ejede skins.
+/* TRUE_CLEAN_MASTER_V1 - clean shop/skin economy
+   Authority keys:
+   - electric-snake-true-clean-coins-v1
+   - electric-snake-true-clean-owned-v1
+   - electric-snake-true-clean-equipped-v1
 */
-
 (function(){
   'use strict';
 
-  function shopLang(){
-    try{ return localStorage.getItem('electric-snake-language-v1') === 'en' ? 'en' : 'da'; }
-    catch(e){ return 'da'; }
-  }
-
-  function shopText(key){
-    const lang = shopLang();
-    const t = {
-      da: {
-        note: 'Ren shop: køb låser op, ejede skins kan vælges, låste skins kan ikke bruges gratis.',
-        equipped: 'Valgt ✅',
-        owned: 'Ejet — tryk for at vælge',
-        buy: 'Køb ',
-        locked: 'Låst ',
-        lockedNeed: 'Låst — mangler ',
-        coins: ' coins 🪙',
-        bought: 'Købt ✅',
-        invalid: 'Ugyldigt skin'
-      },
-      en: {
-        note: 'Clean shop: buying unlocks, owned skins can be equipped, locked skins cannot be used for free.',
-        equipped: 'Equipped ✅',
-        owned: 'Owned — tap to equip',
-        buy: 'Buy ',
-        locked: 'Locked ',
-        lockedNeed: 'Locked — need ',
-        coins: ' coins 🪙',
-        bought: 'Bought ✅',
-        invalid: 'Invalid skin'
-      }
-    };
-    return (t[lang] && t[lang][key]) || t.da[key] || key;
-  }
-
-
+  const COIN_KEY = 'electric-snake-true-clean-coins-v1';
+  const OWNED_KEY = 'electric-snake-true-clean-owned-v1';
+  const EQUIPPED_KEY = 'electric-snake-true-clean-equipped-v1';
 
   const STORAGE = window.__ES_STORAGE__ || window.localStorage;
-
-  const KEYS = {
-    coins: 'electric-snake-clean-coins-v1',
-    owned: 'electric-snake-clean-owned-skins-v1',
-    equipped: 'electric-snake-clean-equipped-skin-v1',
-    installed: 'electric-snake-clean-shop-installed-v1'
-  };
-
-  const COIN_MIRRORS = [
-    'electric-snake-clean-coins-v1',
-    'electric-snake-simple-coins-v2',
-    'electric-snake-coins',
-    'electric-snake-v3-coins'
-  ];
-
-  const OWNED_RECOVERY_KEYS = [
-    'electric-snake-clean-owned-skins-v1',
-    'electric-snake-clean-owned-skins-v2',
-    'electric-snake-owned-skins'
-  ];
 
   function get(key, fallback){
     try{
@@ -6675,28 +6603,26 @@ function showDailyPopup(text, reward){
     try{ STORAGE.setItem(key, JSON.stringify(value)); }catch(e){}
   }
 
+  function cleanCoins(value){
+    const n = Number(value);
+    if(!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.floor(n));
+  }
+
   function skins(){
     return (typeof SKINS !== 'undefined' && Array.isArray(SKINS) && SKINS.length)
       ? SKINS
       : [{ id:'neon', name:'Neon Pulse', price:0 }];
   }
 
-  function skinIds(){
-    return skins().map(s => s && s.id).filter(Boolean);
-  }
-
-  function skinById(id){
-    return skins().find(s => s.id === id) || skins()[0];
-  }
-
-  function cleanCoins(value){
-    const n = Number(value);
-    if(!Number.isFinite(n)) return 0;
-    return Math.max(0, Math.min(999999999, Math.floor(n)));
+  function ids(){
+    const out = skins().map(s => s && s.id).filter(Boolean);
+    if(!out.includes('neon')) out.unshift('neon');
+    return out;
   }
 
   function cleanOwned(value){
-    const valid = skinIds();
+    const valid = ids();
     let owned = Array.isArray(value) ? value : ['neon'];
     owned = owned.filter(id => typeof id === 'string' && valid.includes(id));
     owned = Array.from(new Set(owned));
@@ -6705,70 +6631,33 @@ function showDailyPopup(text, reward){
   }
 
   function readCoins(){
-    let best = 0;
-
-    COIN_MIRRORS.forEach(key => {
-      best = Math.max(best, cleanCoins(get(key, '0')));
-    });
-
-    if(typeof state !== 'undefined'){
-      best = Math.max(best, cleanCoins(state.coins || 0));
-    }
-
-    return best;
+    return cleanCoins(get(COIN_KEY, 0));
   }
 
   function writeCoins(value){
     const coins = cleanCoins(value);
-
-    COIN_MIRRORS.forEach(key => set(key, coins));
+    set(COIN_KEY, coins);
 
     if(typeof state !== 'undefined'){
       state.coins = coins;
     }
 
-    const headerCoins = document.getElementById('coins');
-    if(headerCoins) headerCoins.textContent = String(coins);
+    const top = document.getElementById('coins');
+    if(top) top.textContent = String(coins);
 
-    const menuCoins = document.getElementById('menuCoins');
-    if(menuCoins) menuCoins.textContent = String(coins);
+    const menu = document.getElementById('menuCoins');
+    if(menu) menu.textContent = String(coins);
 
     return coins;
   }
 
-  function isSuspiciousOwnedList(list){
-    const valid = skinIds();
-    const owned = cleanOwned(list);
-
-    // Old bug often saved every skin as owned. Do not import that as a purchase record.
-    return valid.length > 3 && owned.length >= valid.length;
-  }
-
   function readOwned(){
-    const pools = [];
-
-    OWNED_RECOVERY_KEYS.forEach(key => {
-      const value = jget(key, null);
-      if(Array.isArray(value) && !isSuspiciousOwnedList(value)){
-        pools.push(...value);
-      }
-    });
-
-    if(typeof state !== 'undefined' && Array.isArray(state.ownedSkins) && !isSuspiciousOwnedList(state.ownedSkins)){
-      pools.push(...state.ownedSkins);
-    }
-
-    return cleanOwned(pools.length ? pools : ['neon']);
+    return cleanOwned(jget(OWNED_KEY, ['neon']));
   }
 
   function writeOwned(value){
     const owned = cleanOwned(value);
-
-    // Stable ownership mirrors. These are safe because writeOwned is only called after
-    // a purchase or a clean sync of already-owned skins.
-    jset(KEYS.owned, owned);
-    jset('electric-snake-clean-owned-skins-v2', owned);
-    jset('electric-snake-owned-skins', owned);
+    jset(OWNED_KEY, owned);
 
     if(typeof state !== 'undefined'){
       state.ownedSkins = owned.slice();
@@ -6779,22 +6668,68 @@ function showDailyPopup(text, reward){
 
   function readEquipped(){
     const owned = readOwned();
-    const equipped = get(KEYS.equipped, 'neon');
-    return owned.includes(equipped) ? equipped : 'neon';
+    const eq = get(EQUIPPED_KEY, 'neon');
+    return owned.includes(eq) ? eq : 'neon';
   }
 
   function writeEquipped(id){
     const owned = readOwned();
-    const equipped = owned.includes(id) ? id : 'neon';
-
-    set(KEYS.equipped, equipped);
-    set('electric-snake-equipped-skin', equipped);
+    const eq = owned.includes(id) ? id : 'neon';
+    set(EQUIPPED_KEY, eq);
 
     if(typeof state !== 'undefined'){
+      state.equippedSkin = eq;
+    }
+
+    return eq;
+  }
+
+  function sync(){
+    const coins = writeCoins(readCoins());
+    const owned = writeOwned(readOwned());
+    const equipped = writeEquipped(readEquipped());
+
+    if(typeof state !== 'undefined'){
+      state.coins = coins;
+      state.ownedSkins = owned.slice();
       state.equippedSkin = equipped;
     }
 
-    return equipped;
+    return {coins, owned, equipped};
+  }
+
+  function lang(){
+    try{ return localStorage.getItem('electric-snake-language-v1') === 'en' ? 'en' : 'da'; }
+    catch(e){ return 'da'; }
+  }
+
+  function t(key){
+    const map = {
+      da: {
+        equipped:'Valgt ✅',
+        owned:'Ejet — tryk for at vælge',
+        buy:'Køb ',
+        locked:'Låst ',
+        need:'Låst — mangler ',
+        coins:' coins 🪙',
+        bought:'Købt ✅',
+        invalid:'Ugyldigt skin',
+        note:'Clean shop: kun nye køb gemmes herfra.'
+      },
+      en: {
+        equipped:'Equipped ✅',
+        owned:'Owned — tap to equip',
+        buy:'Buy ',
+        locked:'Locked ',
+        need:'Locked — need ',
+        coins:' coins 🪙',
+        bought:'Bought ✅',
+        invalid:'Invalid skin',
+        note:'Clean shop: only new purchases are saved from here.'
+      }
+    };
+    const l = lang();
+    return (map[l] && map[l][key]) || map.da[key] || key;
   }
 
   function price(skin){
@@ -6808,100 +6743,65 @@ function showDailyPopup(text, reward){
     }
   }
 
-  function syncState(){
-    const coins = writeCoins(readCoins());
-    const owned = writeOwned(readOwned());
-    const equipped = writeEquipped(readEquipped());
-
-    if(typeof state !== 'undefined'){
-      state.coins = coins;
-      state.ownedSkins = owned.slice();
-      state.equippedSkin = equipped;
-    }
-  }
-
-  function installCleanShop(){
-    // Never reset owned skins on a new version. Preserve any non-suspicious clean save.
-    writeCoins(readCoins());
-    writeOwned(readOwned());
-    writeEquipped(readEquipped());
-    set(KEYS.installed, '1');
-    syncState();
-  }
-
-  function removeResetControls(){
-    try{
-      document.querySelectorAll('#resetSkinOwnershipBtn,#resetFullShopBtn,#simpleResetShop,.simple-shop-reset').forEach(el => el.remove());
-      document.querySelectorAll('button').forEach(btn => {
-        const t = (btn.textContent || '').toLowerCase();
-        if(t.includes('reset skins') || t.includes('reset shop') || t.includes('reset skins + coins')) btn.remove();
-      });
-    }catch(e){}
-  }
+  window.trueCleanEconomySyncV1 = sync;
 
   window.saveCoinsV10 = function(){
     writeCoins(typeof state !== 'undefined' ? state.coins : readCoins());
   };
-
   window.saveCoins = window.saveCoinsV10;
 
   window.saveSkins = function(){
-    // IMPORTANT: Equipping can save equipped skin, but must never rewrite owned skins from stale state.
-    writeEquipped(typeof state !== 'undefined' ? (state.equippedSkin || readEquipped()) : readEquipped());
-    syncState();
+    writeOwned(readOwned());
+    writeEquipped(readEquipped());
+    sync();
   };
-
   window.saveSkinEconomyV3 = window.saveSkins;
-  window.normalizeOwnedSkinsV3 = syncState;
+  window.normalizeOwnedSkinsV3 = sync;
 
-  window.unlockAllSkinsForTesting = function(){
-    console.warn('Deaktiveret: skins skal købes.');
+  window.skinOwnedV3 = function(skin){
+    return !!(skin && skin.id && readOwned().includes(skin.id));
   };
 
   window.currentSkin = function(){
-    syncState();
-    return skinById(readEquipped());
-  };
-
-  window.skinOwnedV3 = function(skin){
-    if(!skin || !skin.id) return false;
-    if(skin.id === 'neon') return true;
-    return readOwned().includes(skin.id);
+    const eq = readEquipped();
+    return skins().find(s => s.id === eq) || skins()[0];
   };
 
   window.buyOrEquipSkinV3 = function(skin){
     if(!skin || !skin.id) return;
-
-    syncState();
-
-    if(!skinIds().includes(skin.id)){
-      message(shopText('invalid'), '#f87171', 900);
+    if(!ids().includes(skin.id)){
+      message(t('invalid'), '#f87171', 900);
       return;
     }
 
-    const owned = readOwned();
-    const coins = readCoins();
+    let coins = readCoins();
+    let owned = readOwned();
     const cost = price(skin);
 
     if(owned.includes(skin.id)){
       writeEquipped(skin.id);
-      message(shopText('equipped'), '#22c55e', 700);
+      sync();
+      message(t('equipped'), '#22c55e', 700);
       if(typeof window.renderShop === 'function') window.renderShop();
       if(typeof updateUI === 'function') updateUI();
       return;
     }
 
     if(coins < cost){
-      message(shopText('lockedNeed') + (cost - coins) + shopText('coins'), '#facc15', 1100);
+      message(t('need') + (cost - coins) + t('coins'), '#facc15', 1100);
       if(typeof window.renderShop === 'function') window.renderShop();
       return;
     }
 
-    writeCoins(coins - cost);
-    writeOwned([...readOwned(), skin.id]);
-    writeEquipped(skin.id);
+    coins -= cost;
+    owned = cleanOwned([...owned, skin.id]);
 
-    message(shopText('bought'), '#22c55e', 1000);
+    writeCoins(coins);
+    writeOwned(owned);
+    writeEquipped(skin.id);
+    sync();
+
+    message(t('bought'), '#22c55e', 1000);
 
     if(typeof window.renderShop === 'function') window.renderShop();
     if(typeof updateUI === 'function') updateUI();
@@ -6911,9 +6811,7 @@ function showDailyPopup(text, reward){
     const menu = document.getElementById('shopMenu');
     if(!menu) return;
 
-    syncState();
-    removeResetControls();
-
+    sync();
     menu.innerHTML = '';
 
     const top = document.createElement('div');
@@ -6923,7 +6821,7 @@ function showDailyPopup(text, reward){
         <strong>Shop</strong>
         <span>Coins: <b>${readCoins()}</b> 🪙</span>
       </div>
-      <div class="ms-v3-shop-note">${shopText('note')}</div>`;
+      <div class="ms-v3-shop-note">${t('note')}</div>`;
     menu.appendChild(top);
 
     const preview = document.createElement('div');
@@ -6940,30 +6838,34 @@ function showDailyPopup(text, reward){
     list.className = 'skin-list-v3 compact';
     menu.appendChild(list);
 
+    const coins = readCoins();
+    const owned = readOwned();
+    const equipped = readEquipped();
+
     skins().forEach((skin, index) => {
-      const owned = readOwned().includes(skin.id);
-      const equipped = readEquipped() === skin.id;
+      const isOwned = owned.includes(skin.id);
+      const isEquipped = equipped === skin.id;
       const cost = price(skin);
-      const affordable = readCoins() >= cost;
+      const affordable = coins >= cost;
 
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'skin-row-v3 compact';
-      btn.classList.add(owned ? 'ms-v3-owned' : 'ms-v3-locked');
-      if(equipped) btn.classList.add('ms-v3-equipped', 'equipped');
-      btn.setAttribute('data-skin-id', skin.id);
+      btn.classList.add(isOwned ? 'ms-v3-owned' : 'ms-v3-locked');
+      if(isEquipped) btn.classList.add('ms-v3-equipped', 'equipped');
 
       btn.innerHTML = `
         <span>${skin.name || skin.id}</span>
-        <em>${equipped ? shopText('equipped') : owned ? shopText('owned') : affordable ? shopText('buy') + cost + ' 🪙' : shopText('locked') + cost + ' 🪙'}</em>`;
+        <em>${isEquipped ? t('equipped') : isOwned ? t('owned') : affordable ? t('buy') + cost + ' 🪙' : t('locked') + cost + ' 🪙'}</em>`;
 
-      btn.addEventListener('mouseenter', () => { if(typeof updateSkinPreviewV3 === 'function') updateSkinPreviewV3(skin); });
-      btn.addEventListener('focus', () => { if(typeof updateSkinPreviewV3 === 'function') updateSkinPreviewV3(skin); });
-      btn.addEventListener('click', e => {
+      btn.onclick = function(e){
         e.preventDefault();
         if(typeof updateSkinPreviewV3 === 'function') updateSkinPreviewV3(skin);
         window.buyOrEquipSkinV3(skin);
-      });
+        return false;
+      };
+      btn.onmouseenter = function(){ if(typeof updateSkinPreviewV3 === 'function') updateSkinPreviewV3(skin); };
+      btn.onfocus = btn.onmouseenter;
 
       list.appendChild(btn);
 
@@ -6971,19 +6873,21 @@ function showDailyPopup(text, reward){
         setTimeout(() => updateSkinPreviewV3(skin), 0);
       }
     });
-
-    removeResetControls();
   };
 
-  installCleanShop();
+  sync();
 
-  document.addEventListener('DOMContentLoaded', function(){
-    syncState();
-    removeResetControls();
-    if(typeof window.renderShop === 'function') window.renderShop();
-  });
+  // Copy gameplay-earned coins into the clean key.
+  setInterval(function(){
+    if(typeof state !== 'undefined'){
+      const current = readCoins();
+      const gameCoins = cleanCoins(state.coins || 0);
+      if(gameCoins > current) writeCoins(gameCoins);
+    }
+  }, 500);
 
-  window.addEventListener('beforeunload', syncState);
+  window.addEventListener('beforeunload', sync);
+  window.addEventListener('pagehide', sync);
 })();
 
 </script>
@@ -7330,747 +7234,6 @@ function showDailyPopup(text, reward){
 })();
 
 </script>
-  <script>
-/* Electric Snake COIN_EARN_SAVE_FIX_V1 - coin-bridge.js
-   Makes all coin systems use the same balance.
-   Fixes cases where gameplay earns coins but menu/shop reads another key.
-*/
-(function(){
-  'use strict';
-
-  const KEYS = [
-    'electric-snake-clean-coins-v1',
-    'electric-snake-simple-coins-v2',
-    'electric-snake-coins',
-    'electric-snake-v3-coins',
-    'electric-snake-total-coins',
-    'electric-snake-coin-balance'
-  ];
-
-  function storage(){
-    return window.__ES_STORAGE__ || window.localStorage;
-  }
-
-  function readNumber(key){
-    try{
-      const n = Number(storage().getItem(key));
-      return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
-    }catch(e){
-      return 0;
-    }
-  }
-
-  function bestCoins(){
-    let best = 0;
-    KEYS.forEach(key => { best = Math.max(best, readNumber(key)); });
-    return best;
-  }
-
-  function writeAllCoins(value){
-    const coins = Math.max(0, Math.floor(Number(value) || 0));
-    try{
-      KEYS.forEach(key => storage().setItem(key, String(coins)));
-    }catch(e){}
-    const headerCoins = document.getElementById('coins');
-    if(headerCoins) headerCoins.textContent = String(coins);
-    const menuCoins = document.getElementById('menuCoins');
-    if(menuCoins) menuCoins.textContent = String(coins);
-    return coins;
-  }
-
-  function syncCoins(){
-    return writeAllCoins(bestCoins());
-  }
-
-  function wrapStorageSetItem(){
-    const s = storage();
-    if(!s || s.__coinBridgeWrapped) return;
-
-    const oldSetItem = s.setItem.bind(s);
-    s.setItem = function(key, value){
-      const result = oldSetItem(key, value);
-      if(KEYS.includes(String(key))){
-        const coins = Math.max(bestCoins(), Math.max(0, Math.floor(Number(value) || 0)));
-        KEYS.forEach(k => {
-          if(k !== String(key)) oldSetItem(k, String(coins));
-        });
-        const headerCoins = document.getElementById('coins');
-        if(headerCoins) headerCoins.textContent = String(coins);
-        const menuCoins = document.getElementById('menuCoins');
-        if(menuCoins) menuCoins.textContent = String(coins);
-      }
-      return result;
-    };
-
-    s.__coinBridgeWrapped = true;
-  }
-
-  function wrapFn(name){
-    const old = window[name];
-    if(typeof old !== 'function' || old.__coinBridgeWrapped) return;
-    const wrapped = function(){
-      const result = old.apply(this, arguments);
-      setTimeout(syncCoins, 0);
-      setTimeout(syncCoins, 100);
-      return result;
-    };
-    wrapped.__coinBridgeWrapped = true;
-    window[name] = wrapped;
-  }
-
-  function init(){
-    wrapStorageSetItem();
-    syncCoins();
-    wrapFn('renderShop');
-    wrapFn('updateUI');
-    wrapFn('finalOpenMenu');
-    wrapFn('saveCoins');
-    wrapFn('saveCoinsV10');
-    setTimeout(syncCoins, 250);
-    setTimeout(syncCoins, 1000);
-  }
-
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-
-  window.electricSnakeSyncCoins = syncCoins;
-})();
-
-</script>
-
-<script>
-/* SINGLE_GITHUB_FIXED_V1 - robust mp3 music + trophy menu fix */
-(function(){
-  'use strict';
-
-  function $(id){ return document.getElementById(id); }
-
-  function getLang(){
-    try{ return localStorage.getItem('electric-snake-language-v1') === 'en' ? 'en' : 'da'; }
-    catch(e){ return 'da'; }
-  }
-
-  function musicLabel(isPlaying){
-    const en = getLang() === 'en';
-    if(en) return isPlaying ? '🎵 Music: On' : '🎵 Music: Off';
-    return isPlaying ? '🎵 Musik: Til' : '🎵 Musik: Fra';
-  }
-
-  function audio(){
-    const a = $('bgMusic');
-    if(!a) return null;
-    a.loop = true;
-    a.preload = 'auto';
-    a.src = './slimeyfox-immortal-arcade-487328.mp3';
-    return a;
-  }
-
-  function desiredVolume(){
-    try{
-      const ui = Number(localStorage.getItem('electric-snake-audio-volume-ui') || 70) / 100;
-      return Math.max(0, Math.min(1, ui * 0.55));
-    }catch(e){
-      return 0.38;
-    }
-  }
-
-  function updateMusicButton(){
-    const btn = $('realMusicToggleBtn');
-    const a = audio();
-    if(!btn || !a) return;
-    btn.textContent = musicLabel(!a.paused && !a.muted);
-  }
-
-  async function startMusic(){
-    const a = audio();
-    if(!a) return false;
-    try{
-      a.muted = false;
-      a.volume = desiredVolume();
-      await a.play();
-      updateMusicButton();
-      return true;
-    }catch(e){
-      console.warn('Music cannot start until the user clicks/taps the page.', e);
-      updateMusicButton();
-      return false;
-    }
-  }
-
-  function stopMusic(){
-    const a = audio();
-    if(!a) return;
-    try{ a.pause(); }catch(e){}
-    updateMusicButton();
-  }
-
-  function toggleMusic(){
-    const a = audio();
-    if(!a) return;
-    if(a.paused || a.muted) startMusic();
-    else stopMusic();
-  }
-
-  function addMusicButton(){
-    if($('realMusicToggleBtn')) return;
-    const soundCard = document.querySelector('#finalSound .final-card');
-    if(!soundCard) return;
-
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.id = 'realMusicToggleBtn';
-    btn.className = 'secondary';
-    btn.style.marginTop = '10px';
-    btn.textContent = musicLabel(false);
-    btn.onclick = function(e){
-      e.preventDefault();
-      e.stopPropagation();
-      toggleMusic();
-      return false;
-    };
-
-    const tip = document.createElement('p');
-    tip.className = 'tips';
-    tip.textContent = getLang() === 'en'
-      ? 'Background music starts after clicking the button or starting the game.'
-      : 'Baggrundsmusik starter efter klik på knappen eller når spillet startes.';
-
-    soundCard.appendChild(btn);
-    soundCard.appendChild(tip);
-    updateMusicButton();
-  }
-
-  function patchGameStart(){
-    ['startBtn','toggleBtn','restartBtn'].forEach(function(id){
-      const btn = $(id);
-      if(!btn || btn.__realMusicPatched) return;
-      btn.__realMusicPatched = true;
-      btn.addEventListener('click', function(){
-        setTimeout(startMusic, 0);
-      }, true);
-    });
-  }
-
-  function renderFinalTrophies(){
-    try{
-      if(typeof checkTrophies === 'function') checkTrophies();
-      if(typeof renderTrophies === 'function') renderTrophies();
-
-      const src = $('trophyList');
-      const dst = $('finalTrophyList');
-      if(src && dst){
-        dst.innerHTML = src.innerHTML || '<p class="tips">Ingen trofæer vist endnu.</p>';
-      }
-    }catch(e){
-      console.warn('Could not render final trophies', e);
-    }
-  }
-
-  function patchFinalMenuButtons(){
-    document.querySelectorAll('[data-final-open]').forEach(function(btn){
-      if(btn.__trophyMusicPatch) return;
-      btn.__trophyMusicPatch = true;
-      btn.addEventListener('click', function(){
-        const target = btn.getAttribute('data-final-open');
-        setTimeout(function(){
-          if(target === 'finalTrophies' || target === 'finalTrofæer') renderFinalTrophies();
-          if(target === 'finalSound') { addMusicButton(); updateMusicButton(); }
-        }, 0);
-      }, true);
-    });
-  }
-
-  function init(){
-    addMusicButton();
-    patchGameStart();
-    patchFinalMenuButtons();
-    renderFinalTrophies();
-    updateMusicButton();
-    setTimeout(function(){ addMusicButton(); patchGameStart(); patchFinalMenuButtons(); updateMusicButton(); }, 300);
-    setTimeout(function(){ addMusicButton(); patchGameStart(); patchFinalMenuButtons(); updateMusicButton(); }, 1000);
-  }
-
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', init);
-  }else{
-    init();
-  }
-
-  window.electricSnakeStartRealMusic = startMusic;
-  window.electricSnakeToggleRealMusic = toggleMusic;
-})();
-</script>
-
-
-
-
-
-<script>
-/* KEEP_PROGRESS_ECONOMY_RESET_V1
-   Keeps:
-   - level unlocks
-   - trophies
-   - highscores
-   - language
-   - music
-   Resets ONLY:
-   - coins
-   - owned skins
-   - equipped skin
-*/
-(function(){
-  'use strict';
-
-  const ECON = {
-    coins: 'electric-snake-econ-v1-coins',
-    owned: 'electric-snake-econ-v1-owned',
-    equipped: 'electric-snake-econ-v1-equipped',
-    initialized: 'electric-snake-econ-v1-init'
-  };
-
-  const UI_COIN_KEYS = [
-    'electric-snake-clean-coins-v1',
-    'electric-snake-simple-coins-v2',
-    'electric-snake-coins',
-    'electric-snake-v3-coins',
-    'electric-snake-total-coins',
-    'electric-snake-coin-balance'
-  ];
-
-  const UI_OWNED_KEYS = [
-    'electric-snake-clean-owned-skins-v1',
-    'electric-snake-clean-owned-skins-v2',
-    'electric-snake-owned-skins'
-  ];
-
-  function store(){ return window.localStorage || window.__ES_STORAGE__; }
-
-  function get(k, f){
-    try{
-      const v = store().getItem(k);
-      return v == null ? f : v;
-    }catch(e){ return f; }
-  }
-
-  function set(k, v){
-    try{ store().setItem(k, String(v)); }catch(e){}
-    try{
-      if(window.__ES_STORAGE__ && window.__ES_STORAGE__ !== store()){
-        window.__ES_STORAGE__.setItem(k, String(v));
-      }
-    }catch(e){}
-  }
-
-  function jget(k, f){
-    try{
-      const raw = store().getItem(k);
-      return raw ? JSON.parse(raw) : f;
-    }catch(e){ return f; }
-  }
-
-  function jset(k, v){
-    try{ store().setItem(k, JSON.stringify(v)); }catch(e){}
-    try{
-      if(window.__ES_STORAGE__ && window.__ES_STORAGE__ !== store()){
-        window.__ES_STORAGE__.setItem(k, JSON.stringify(v));
-      }
-    }catch(e){}
-  }
-
-  function cleanCoins(v){
-    const n = Number(v);
-    if(!Number.isFinite(n)) return 0;
-    return Math.max(0, Math.floor(n));
-  }
-
-  function skins(){
-    return (typeof SKINS !== 'undefined' && Array.isArray(SKINS)) ? SKINS : [];
-  }
-
-  function skinIds(){
-    const ids = skins().map(s => s && s.id).filter(Boolean);
-    if(!ids.includes('neon')) ids.unshift('neon');
-    return ids;
-  }
-
-  function cleanOwned(value){
-    const valid = skinIds();
-    let owned = Array.isArray(value) ? value : ['neon'];
-    owned = owned.filter(id => typeof id === 'string' && valid.includes(id));
-    owned = Array.from(new Set(owned));
-    if(!owned.includes('neon')) owned.unshift('neon');
-    return owned;
-  }
-
-  // IMPORTANT:
-  // We DO NOT touch level unlocks / trophies / highscores.
-  // Only economy gets fresh keys.
-  function firstInit(){
-    if(get(ECON.initialized, null) === '1') return;
-
-    writeCoins(0);
-    writeOwned(['neon']);
-    writeEquipped('neon');
-
-    set(ECON.initialized, '1');
-  }
-
-  function readCoins(){
-    return cleanCoins(get(ECON.coins, 0));
-  }
-
-  function writeCoins(v){
-    const c = cleanCoins(v);
-
-    set(ECON.coins, c);
-
-    // Mirror to old UI-only keys so displays stay updated.
-    UI_COIN_KEYS.forEach(k => set(k, c));
-
-    try{
-      if(typeof state !== 'undefined'){
-        state.coins = c;
-      }
-    }catch(e){}
-
-    const top = document.getElementById('coins');
-    if(top) top.textContent = String(c);
-
-    const menu = document.getElementById('menuCoins');
-    if(menu) menu.textContent = String(c);
-
-    return c;
-  }
-
-  function readOwned(){
-    return cleanOwned(jget(ECON.owned, ['neon']));
-  }
-
-  function writeOwned(v){
-    const owned = cleanOwned(v);
-
-    jset(ECON.owned, owned);
-
-    // UI mirrors only
-    UI_OWNED_KEYS.forEach(k => jset(k, owned));
-
-    try{
-      if(typeof state !== 'undefined'){
-        state.ownedSkins = owned.slice();
-      }
-    }catch(e){}
-
-    return owned;
-  }
-
-  function readEquipped(){
-    const owned = readOwned();
-    const eq = get(ECON.equipped, 'neon');
-    return owned.includes(eq) ? eq : 'neon';
-  }
-
-  function writeEquipped(id){
-    const owned = readOwned();
-    const eq = owned.includes(id) ? id : 'neon';
-
-    set(ECON.equipped, eq);
-
-    set('electric-snake-equipped-skin', eq);
-    set('electric-snake-clean-equipped-skin-v1', eq);
-
-    try{
-      if(typeof state !== 'undefined'){
-        state.equippedSkin = eq;
-      }
-    }catch(e){}
-
-    return eq;
-  }
-
-  function syncEconomy(){
-    const c = writeCoins(readCoins());
-    const owned = writeOwned(readOwned());
-    const eq = writeEquipped(readEquipped());
-
-    try{
-      if(typeof state !== 'undefined'){
-        state.coins = c;
-        state.ownedSkins = owned.slice();
-        state.equippedSkin = eq;
-      }
-    }catch(e){}
-
-    return {coins:c, owned, equipped:eq};
-  }
-
-  function lang(){
-    try{
-      return localStorage.getItem('electric-snake-language-v1') === 'en' ? 'en' : 'da';
-    }catch(e){
-      return 'da';
-    }
-  }
-
-  function txt(key){
-    const d = {
-      da:{
-        equipped:'Valgt ✅',
-        owned:'Ejet — tryk for at vælge',
-        buy:'Køb ',
-        locked:'Låst ',
-        need:'Låst — mangler ',
-        coins:' coins 🪙',
-        bought:'Købt ✅',
-        note:'Ny clean economy-save. Progress er bevaret.'
-      },
-      en:{
-        equipped:'Equipped ✅',
-        owned:'Owned — tap to equip',
-        buy:'Buy ',
-        locked:'Locked ',
-        need:'Locked — need ',
-        coins:' coins 🪙',
-        bought:'Bought ✅',
-        note:'New clean economy save. Progress is preserved.'
-      }
-    };
-    const l = lang();
-    return (d[l] && d[l][key]) || d.da[key] || key;
-  }
-
-  function price(skin){
-    if(!skin || skin.id === 'neon') return 0;
-    return cleanCoins(skin.price || 0);
-  }
-
-  function msg(t, color, ms){
-    if(typeof addCenterMessage === 'function'){
-      addCenterMessage(t, color || '#22c55e', ms || 900);
-    }
-  }
-
-  window.saveCoins = function(){
-    try{
-      if(typeof state !== 'undefined'){
-        writeCoins(state.coins || readCoins());
-      }else{
-        writeCoins(readCoins());
-      }
-    }catch(e){
-      writeCoins(readCoins());
-    }
-  };
-
-  window.saveCoinsV10 = window.saveCoins;
-
-  window.saveSkins = function(){
-    writeOwned(readOwned());
-    writeEquipped(readEquipped());
-    syncEconomy();
-  };
-
-  window.saveSkinEconomyV3 = window.saveSkins;
-  window.normalizeOwnedSkinsV3 = syncEconomy;
-
-  window.skinOwnedV3 = function(skin){
-    return !!(skin && skin.id && readOwned().includes(skin.id));
-  };
-
-  window.currentSkin = function(){
-    const eq = readEquipped();
-    return skins().find(s => s.id === eq) || skins()[0];
-  };
-
-  window.buyOrEquipSkinV3 = function(skin){
-    if(!skin || !skin.id) return;
-
-    const valid = skinIds();
-    if(!valid.includes(skin.id)) return;
-
-    let c = readCoins();
-    let owned = readOwned();
-    const cost = price(skin);
-
-    if(owned.includes(skin.id)){
-      writeEquipped(skin.id);
-      syncEconomy();
-
-      msg(txt('equipped'), '#22c55e', 700);
-
-      if(typeof window.renderShop === 'function') window.renderShop();
-      if(typeof updateUI === 'function') updateUI();
-
-      return;
-    }
-
-    if(c < cost){
-      msg(txt('need') + (cost - c) + txt('coins'), '#facc15', 1100);
-
-      if(typeof window.renderShop === 'function') window.renderShop();
-
-      return;
-    }
-
-    c -= cost;
-    owned = cleanOwned([...owned, skin.id]);
-
-    writeCoins(c);
-    writeOwned(owned);
-    writeEquipped(skin.id);
-    syncEconomy();
-
-    // Extra persistence
-    setTimeout(syncEconomy, 50);
-    setTimeout(syncEconomy, 300);
-    setTimeout(syncEconomy, 1000);
-
-    msg(txt('bought'), '#22c55e', 1000);
-
-    if(typeof window.renderShop === 'function') window.renderShop();
-    if(typeof updateUI === 'function') updateUI();
-  };
-
-  window.renderShop = function(){
-    const menu = document.getElementById('shopMenu');
-    if(!menu) return;
-
-    syncEconomy();
-    menu.innerHTML = '';
-
-    const top = document.createElement('div');
-    top.className = 'simple-shop-card';
-    top.innerHTML = `
-      <div class="simple-shop-top">
-        <strong>Shop</strong>
-        <span>Coins: <b>${readCoins()}</b> 🪙</span>
-      </div>
-      <div class="ms-v3-shop-note">${txt('note')}</div>`;
-    menu.appendChild(top);
-
-    const preview = document.createElement('div');
-    preview.className = 'skin-preview-v3';
-    preview.innerHTML = `
-      <div class="skin-preview-v3-info">
-        <strong id="skinPreviewV3Title">Neon Pulse</strong>
-        <span id="skinPreviewV3Meta">Starter-skin</span>
-      </div>
-      <canvas id="skinPreviewV3Canvas" width="240" height="78"></canvas>`;
-    menu.appendChild(preview);
-
-    const list = document.createElement('div');
-    list.className = 'skin-list-v3 compact';
-    menu.appendChild(list);
-
-    const c = readCoins();
-    const owned = readOwned();
-    const eq = readEquipped();
-
-    skins().forEach((skin, index) => {
-      const isOwned = owned.includes(skin.id);
-      const isEquipped = eq === skin.id;
-      const cost = price(skin);
-      const affordable = c >= cost;
-
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'skin-row-v3 compact';
-
-      btn.classList.add(isOwned ? 'ms-v3-owned' : 'ms-v3-locked');
-
-      if(isEquipped) btn.classList.add('ms-v3-equipped', 'equipped');
-
-      btn.innerHTML = `
-        <span>${skin.name || skin.id}</span>
-        <em>${
-          isEquipped ? txt('equipped')
-          : isOwned ? txt('owned')
-          : affordable ? txt('buy') + cost + ' 🪙'
-          : txt('locked') + cost + ' 🪙'
-        }</em>`;
-
-      btn.onclick = function(e){
-        e.preventDefault();
-
-        if(typeof updateSkinPreviewV3 === 'function'){
-          updateSkinPreviewV3(skin);
-        }
-
-        window.buyOrEquipSkinV3(skin);
-
-        return false;
-      };
-
-      btn.onmouseenter = function(){
-        if(typeof updateSkinPreviewV3 === 'function'){
-          updateSkinPreviewV3(skin);
-        }
-      };
-
-      btn.onfocus = btn.onmouseenter;
-
-      list.appendChild(btn);
-
-      if(index === 0 && typeof updateSkinPreviewV3 === 'function'){
-        setTimeout(() => updateSkinPreviewV3(skin), 0);
-      }
-    });
-  };
-
-  function wrap(name){
-    const old = window[name];
-
-    if(typeof old !== 'function' || old.__econKeepProgressWrapped) return;
-
-    const wrapped = function(){
-      const result = old.apply(this, arguments);
-
-      setTimeout(syncEconomy, 0);
-      setTimeout(syncEconomy, 300);
-
-      return result;
-    };
-
-    wrapped.__econKeepProgressWrapped = true;
-
-    window[name] = wrapped;
-  }
-
-  firstInit();
-  syncEconomy();
-
-  wrap('showMenu');
-  wrap('resetGame');
-  wrap('setGameOver');
-  wrap('updateUI');
-
-  // Sync gameplay-earned coins into new economy.
-  setInterval(function(){
-    try{
-      if(typeof state !== 'undefined'){
-        const gameCoins = cleanCoins(state.coins || 0);
-        const current = readCoins();
-
-        if(gameCoins > current){
-          writeCoins(gameCoins);
-        }
-      }
-    }catch(e){}
-  }, 500);
-
-  window.addEventListener('beforeunload', syncEconomy);
-  window.addEventListener('pagehide', syncEconomy);
-
-  document.addEventListener('visibilitychange', function(){
-    if(document.visibilityState === 'hidden'){
-      syncEconomy();
-    }
-  });
-})();
-</script>
-
 </body>
 
 </html>
