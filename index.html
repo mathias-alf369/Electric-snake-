@@ -552,7 +552,7 @@ button:hover{
             <div class="final-menu-buttons">
               <button type="button" class="final-menu-btn" data-final-open="finalPlay">▶ Start spil</button>
               <button type="button" class="final-menu-btn" data-final-open="finalDaily">📅 Daglige challenges</button>
-              <button type="button" class="final-menu-btn" data-final-open="finalTrophies">🏆 Trofæer</button>
+              <button type="button" class="final-menu-btn" data-final-open="finalTrofæer">🏆 Trofæer</button>
               <button type="button" class="final-menu-btn" data-final-open="finalSound">🔊 Lyd</button>
               <button type="button" class="final-menu-btn" data-final-open="finalGem">💾 Gem</button>
               <button type="button" class="final-menu-btn" id="languageToggleBtn" data-no-translate="1">
@@ -592,7 +592,7 @@ button:hover{
             </div>
           </div>
 
-          <div class="final-menu-screen" id="finalTrophies">
+          <div class="final-menu-screen" id="finalTrofæer">
             <button type="button" class="final-back" data-final-open="finalHome">← Tilbage</button>
             <div class="final-card">
               <h3>🏆 Trofæer</h3>
@@ -973,30 +973,42 @@ button:hover{
 
 
   // ============================================================
-  // TRUE_CLEAN_MASTER_V1 COIN SAVE
-  // New isolated coin key. Does not read old broken coin saves.
+  // COIN SAVE FIX ONLY V10
+  // Stable coin persistence. Does not touch menu/start flow.
   // ============================================================
 
-  const TRUE_COIN_KEY_V1 = 'electric-snake-true-clean-coins-v1';
+  
+  const COIN_SAVE_KEY_V10 = 'electric-snake-coins';
+  const SIMPLE_COIN_SAVE_KEY_V10 = 'electric-snake-simple-coins-v2';
 
-  function cleanCoinNumberTrueV1(value){
-    const n = Number(value);
+  function readCoinNumberV10(key){
+    const n = Number(window.__ES_STORAGE__.getItem(key));
     return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
   }
 
   function loadCoinsV10(){
     try{
-      state.coins = cleanCoinNumberTrueV1(window.__ES_STORAGE__.getItem(TRUE_COIN_KEY_V1) || 0);
-      mirrorCoinsV10(state.coins);
+      // IMPORTANT:
+      // Load ONLY the main coin save.
+      // Do NOT use highest-value logic anymore.
+      const saved = readCoinNumberV10(COIN_SAVE_KEY_V10);
+      state.coins = saved;
+      mirrorCoinsV10(saved);
     }catch(e){}
   }
 
   function mirrorCoinsV10(value){
     try{
-      const coins = cleanCoinNumberTrueV1(value);
+      const coins = Math.max(0, Math.floor(Number(value) || 0));
+
       state.coins = coins;
 
-      window.__ES_STORAGE__.setItem(TRUE_COIN_KEY_V1, String(coins));
+      // Mirror exact value only.
+      window.__ES_STORAGE__.setItem(COIN_SAVE_KEY_V10, String(coins));
+      window.__ES_STORAGE__.setItem(SIMPLE_COIN_SAVE_KEY_V10, String(coins));
+      window.__ES_STORAGE__.setItem('electric-snake-v3-coins', String(coins));
+      window.__ES_STORAGE__.setItem('electric-snake-total-coins', String(coins));
+      window.__ES_STORAGE__.setItem('electric-snake-coin-balance', String(coins));
 
       const coinEl = document.getElementById('coins');
       if(coinEl) coinEl.textContent = String(coins);
@@ -1006,7 +1018,7 @@ button:hover{
 
       return coins;
     }catch(e){
-      return cleanCoinNumberTrueV1(value || 0);
+      return Number(value || 0);
     }
   }
 
@@ -3262,6 +3274,7 @@ playFlameLoopSound();
       }
       state.coins += coinGain;
     saveCoinsV10();
+    saveCoins();
       addCoinsForValgtSkin(coinGain);
       saveCoins();
       if(state.score > state.best){
@@ -6562,20 +6575,75 @@ function showDailyPopup(text, reward){
     }
 </script>
   <script>
-/* TRUE_CLEAN_MASTER_V1 - clean shop/skin economy
-   Authority keys:
-   - electric-snake-true-clean-coins-v1
-   - electric-snake-true-clean-owned-v1
-   - electric-snake-true-clean-equipped-v1
+/* Electric Snake MODULAR_CLEAN_FINAL_V1 - shop.js
+
+   Shop-styring:
+   - Coins bevares fra eksisterende coin-keys.
+   - Skin-ejerskab bruger en ny ren key, så gamle ødelagte saves ikke følger med.
+   - Ejede skins kan kun tilføjes ved køb.
+   - At vælge et andet skin omskriver/fjerner aldrig ejede skins.
 */
+
 (function(){
   'use strict';
 
-  const COIN_KEY = 'electric-snake-true-clean-coins-v1';
-  const OWNED_KEY = 'electric-snake-true-clean-owned-v1';
-  const EQUIPPED_KEY = 'electric-snake-true-clean-equipped-v1';
+  function shopLang(){
+    try{ return localStorage.getItem('electric-snake-language-v1') === 'en' ? 'en' : 'da'; }
+    catch(e){ return 'da'; }
+  }
+
+  function shopText(key){
+    const lang = shopLang();
+    const t = {
+      da: {
+        note: 'Ren shop: køb låser op, ejede skins kan vælges, låste skins kan ikke bruges gratis.',
+        equipped: 'Valgt ✅',
+        owned: 'Ejet — tryk for at vælge',
+        buy: 'Køb ',
+        locked: 'Låst ',
+        lockedNeed: 'Låst — mangler ',
+        coins: ' coins 🪙',
+        bought: 'Købt ✅',
+        invalid: 'Ugyldigt skin'
+      },
+      en: {
+        note: 'Clean shop: buying unlocks, owned skins can be equipped, locked skins cannot be used for free.',
+        equipped: 'Equipped ✅',
+        owned: 'Owned — tap to equip',
+        buy: 'Buy ',
+        locked: 'Locked ',
+        lockedNeed: 'Locked — need ',
+        coins: ' coins 🪙',
+        bought: 'Bought ✅',
+        invalid: 'Invalid skin'
+      }
+    };
+    return (t[lang] && t[lang][key]) || t.da[key] || key;
+  }
+
+
 
   const STORAGE = window.__ES_STORAGE__ || window.localStorage;
+
+  const KEYS = {
+    coins: 'electric-snake-clean-coins-v1',
+    owned: 'electric-snake-clean-owned-skins-v1',
+    equipped: 'electric-snake-clean-equipped-skin-v1',
+    installed: 'electric-snake-clean-shop-installed-v1'
+  };
+
+  const COIN_MIRRORS = [
+    'electric-snake-clean-coins-v1',
+    'electric-snake-simple-coins-v2',
+    'electric-snake-coins',
+    'electric-snake-v3-coins'
+  ];
+
+  const OWNED_RECOVERY_KEYS = [
+    'electric-snake-clean-owned-skins-v1',
+    'electric-snake-clean-owned-skins-v2',
+    'electric-snake-owned-skins'
+  ];
 
   function get(key, fallback){
     try{
@@ -6603,26 +6671,28 @@ function showDailyPopup(text, reward){
     try{ STORAGE.setItem(key, JSON.stringify(value)); }catch(e){}
   }
 
-  function cleanCoins(value){
-    const n = Number(value);
-    if(!Number.isFinite(n)) return 0;
-    return Math.max(0, Math.floor(n));
-  }
-
   function skins(){
     return (typeof SKINS !== 'undefined' && Array.isArray(SKINS) && SKINS.length)
       ? SKINS
       : [{ id:'neon', name:'Neon Pulse', price:0 }];
   }
 
-  function ids(){
-    const out = skins().map(s => s && s.id).filter(Boolean);
-    if(!out.includes('neon')) out.unshift('neon');
-    return out;
+  function skinIds(){
+    return skins().map(s => s && s.id).filter(Boolean);
+  }
+
+  function skinById(id){
+    return skins().find(s => s.id === id) || skins()[0];
+  }
+
+  function cleanCoins(value){
+    const n = Number(value);
+    if(!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.min(999999999, Math.floor(n)));
   }
 
   function cleanOwned(value){
-    const valid = ids();
+    const valid = skinIds();
     let owned = Array.isArray(value) ? value : ['neon'];
     owned = owned.filter(id => typeof id === 'string' && valid.includes(id));
     owned = Array.from(new Set(owned));
@@ -6631,33 +6701,70 @@ function showDailyPopup(text, reward){
   }
 
   function readCoins(){
-    return cleanCoins(get(COIN_KEY, 0));
+    let best = 0;
+
+    COIN_MIRRORS.forEach(key => {
+      best = Math.max(best, cleanCoins(get(key, '0')));
+    });
+
+    if(typeof state !== 'undefined'){
+      best = Math.max(best, cleanCoins(state.coins || 0));
+    }
+
+    return best;
   }
 
   function writeCoins(value){
     const coins = cleanCoins(value);
-    set(COIN_KEY, coins);
+
+    COIN_MIRRORS.forEach(key => set(key, coins));
 
     if(typeof state !== 'undefined'){
       state.coins = coins;
     }
 
-    const top = document.getElementById('coins');
-    if(top) top.textContent = String(coins);
+    const headerCoins = document.getElementById('coins');
+    if(headerCoins) headerCoins.textContent = String(coins);
 
-    const menu = document.getElementById('menuCoins');
-    if(menu) menu.textContent = String(coins);
+    const menuCoins = document.getElementById('menuCoins');
+    if(menuCoins) menuCoins.textContent = String(coins);
 
     return coins;
   }
 
+  function isSuspiciousOwnedList(list){
+    const valid = skinIds();
+    const owned = cleanOwned(list);
+
+    // Old bug often saved every skin as owned. Do not import that as a purchase record.
+    return valid.length > 3 && owned.length >= valid.length;
+  }
+
   function readOwned(){
-    return cleanOwned(jget(OWNED_KEY, ['neon']));
+    const pools = [];
+
+    OWNED_RECOVERY_KEYS.forEach(key => {
+      const value = jget(key, null);
+      if(Array.isArray(value) && !isSuspiciousOwnedList(value)){
+        pools.push(...value);
+      }
+    });
+
+    if(typeof state !== 'undefined' && Array.isArray(state.ownedSkins) && !isSuspiciousOwnedList(state.ownedSkins)){
+      pools.push(...state.ownedSkins);
+    }
+
+    return cleanOwned(pools.length ? pools : ['neon']);
   }
 
   function writeOwned(value){
     const owned = cleanOwned(value);
-    jset(OWNED_KEY, owned);
+
+    // Stable ownership mirrors. These are safe because writeOwned is only called after
+    // a purchase or a clean sync of already-owned skins.
+    jset(KEYS.owned, owned);
+    jset('electric-snake-clean-owned-skins-v2', owned);
+    jset('electric-snake-owned-skins', owned);
 
     if(typeof state !== 'undefined'){
       state.ownedSkins = owned.slice();
@@ -6668,68 +6775,22 @@ function showDailyPopup(text, reward){
 
   function readEquipped(){
     const owned = readOwned();
-    const eq = get(EQUIPPED_KEY, 'neon');
-    return owned.includes(eq) ? eq : 'neon';
+    const equipped = get(KEYS.equipped, 'neon');
+    return owned.includes(equipped) ? equipped : 'neon';
   }
 
   function writeEquipped(id){
     const owned = readOwned();
-    const eq = owned.includes(id) ? id : 'neon';
-    set(EQUIPPED_KEY, eq);
+    const equipped = owned.includes(id) ? id : 'neon';
+
+    set(KEYS.equipped, equipped);
+    set('electric-snake-equipped-skin', equipped);
 
     if(typeof state !== 'undefined'){
-      state.equippedSkin = eq;
-    }
-
-    return eq;
-  }
-
-  function sync(){
-    const coins = writeCoins(readCoins());
-    const owned = writeOwned(readOwned());
-    const equipped = writeEquipped(readEquipped());
-
-    if(typeof state !== 'undefined'){
-      state.coins = coins;
-      state.ownedSkins = owned.slice();
       state.equippedSkin = equipped;
     }
 
-    return {coins, owned, equipped};
-  }
-
-  function lang(){
-    try{ return localStorage.getItem('electric-snake-language-v1') === 'en' ? 'en' : 'da'; }
-    catch(e){ return 'da'; }
-  }
-
-  function t(key){
-    const map = {
-      da: {
-        equipped:'Valgt ✅',
-        owned:'Ejet — tryk for at vælge',
-        buy:'Køb ',
-        locked:'Låst ',
-        need:'Låst — mangler ',
-        coins:' coins 🪙',
-        bought:'Købt ✅',
-        invalid:'Ugyldigt skin',
-        note:'Clean shop: kun nye køb gemmes herfra.'
-      },
-      en: {
-        equipped:'Equipped ✅',
-        owned:'Owned — tap to equip',
-        buy:'Buy ',
-        locked:'Locked ',
-        need:'Locked — need ',
-        coins:' coins 🪙',
-        bought:'Bought ✅',
-        invalid:'Invalid skin',
-        note:'Clean shop: only new purchases are saved from here.'
-      }
-    };
-    const l = lang();
-    return (map[l] && map[l][key]) || map.da[key] || key;
+    return equipped;
   }
 
   function price(skin){
@@ -6743,65 +6804,100 @@ function showDailyPopup(text, reward){
     }
   }
 
-  window.trueCleanEconomySyncV1 = sync;
+  function syncState(){
+    const coins = writeCoins(readCoins());
+    const owned = writeOwned(readOwned());
+    const equipped = writeEquipped(readEquipped());
+
+    if(typeof state !== 'undefined'){
+      state.coins = coins;
+      state.ownedSkins = owned.slice();
+      state.equippedSkin = equipped;
+    }
+  }
+
+  function installCleanShop(){
+    // Never reset owned skins on a new version. Preserve any non-suspicious clean save.
+    writeCoins(readCoins());
+    writeOwned(readOwned());
+    writeEquipped(readEquipped());
+    set(KEYS.installed, '1');
+    syncState();
+  }
+
+  function removeResetControls(){
+    try{
+      document.querySelectorAll('#resetSkinOwnershipBtn,#resetFullShopBtn,#simpleResetShop,.simple-shop-reset').forEach(el => el.remove());
+      document.querySelectorAll('button').forEach(btn => {
+        const t = (btn.textContent || '').toLowerCase();
+        if(t.includes('reset skins') || t.includes('reset shop') || t.includes('reset skins + coins')) btn.remove();
+      });
+    }catch(e){}
+  }
 
   window.saveCoinsV10 = function(){
     writeCoins(typeof state !== 'undefined' ? state.coins : readCoins());
   };
+
   window.saveCoins = window.saveCoinsV10;
 
   window.saveSkins = function(){
-    writeOwned(readOwned());
-    writeEquipped(readEquipped());
-    sync();
+    // IMPORTANT: Equipping can save equipped skin, but must never rewrite owned skins from stale state.
+    writeEquipped(typeof state !== 'undefined' ? (state.equippedSkin || readEquipped()) : readEquipped());
+    syncState();
   };
-  window.saveSkinEconomyV3 = window.saveSkins;
-  window.normalizeOwnedSkinsV3 = sync;
 
-  window.skinOwnedV3 = function(skin){
-    return !!(skin && skin.id && readOwned().includes(skin.id));
+  window.saveSkinEconomyV3 = window.saveSkins;
+  window.normalizeOwnedSkinsV3 = syncState;
+
+  window.unlockAllSkinsForTesting = function(){
+    console.warn('Deaktiveret: skins skal købes.');
   };
 
   window.currentSkin = function(){
-    const eq = readEquipped();
-    return skins().find(s => s.id === eq) || skins()[0];
+    syncState();
+    return skinById(readEquipped());
+  };
+
+  window.skinOwnedV3 = function(skin){
+    if(!skin || !skin.id) return false;
+    if(skin.id === 'neon') return true;
+    return readOwned().includes(skin.id);
   };
 
   window.buyOrEquipSkinV3 = function(skin){
     if(!skin || !skin.id) return;
-    if(!ids().includes(skin.id)){
-      message(t('invalid'), '#f87171', 900);
+
+    syncState();
+
+    if(!skinIds().includes(skin.id)){
+      message(shopText('invalid'), '#f87171', 900);
       return;
     }
 
-    let coins = readCoins();
-    let owned = readOwned();
+    const owned = readOwned();
+    const coins = readCoins();
     const cost = price(skin);
 
     if(owned.includes(skin.id)){
       writeEquipped(skin.id);
-      sync();
-      message(t('equipped'), '#22c55e', 700);
+      message(shopText('equipped'), '#22c55e', 700);
       if(typeof window.renderShop === 'function') window.renderShop();
       if(typeof updateUI === 'function') updateUI();
       return;
     }
 
     if(coins < cost){
-      message(t('need') + (cost - coins) + t('coins'), '#facc15', 1100);
+      message(shopText('lockedNeed') + (cost - coins) + shopText('coins'), '#facc15', 1100);
       if(typeof window.renderShop === 'function') window.renderShop();
       return;
     }
 
-    coins -= cost;
-    owned = cleanOwned([...owned, skin.id]);
-
-    writeCoins(coins);
-    writeOwned(owned);
+    writeCoins(coins - cost);
+    writeOwned([...readOwned(), skin.id]);
     writeEquipped(skin.id);
-    sync();
 
-    message(t('bought'), '#22c55e', 1000);
+    message(shopText('bought'), '#22c55e', 1000);
 
     if(typeof window.renderShop === 'function') window.renderShop();
     if(typeof updateUI === 'function') updateUI();
@@ -6811,7 +6907,9 @@ function showDailyPopup(text, reward){
     const menu = document.getElementById('shopMenu');
     if(!menu) return;
 
-    sync();
+    syncState();
+    removeResetControls();
+
     menu.innerHTML = '';
 
     const top = document.createElement('div');
@@ -6821,7 +6919,7 @@ function showDailyPopup(text, reward){
         <strong>Shop</strong>
         <span>Coins: <b>${readCoins()}</b> 🪙</span>
       </div>
-      <div class="ms-v3-shop-note">${t('note')}</div>`;
+      <div class="ms-v3-shop-note">${shopText('note')}</div>`;
     menu.appendChild(top);
 
     const preview = document.createElement('div');
@@ -6838,34 +6936,30 @@ function showDailyPopup(text, reward){
     list.className = 'skin-list-v3 compact';
     menu.appendChild(list);
 
-    const coins = readCoins();
-    const owned = readOwned();
-    const equipped = readEquipped();
-
     skins().forEach((skin, index) => {
-      const isOwned = owned.includes(skin.id);
-      const isEquipped = equipped === skin.id;
+      const owned = readOwned().includes(skin.id);
+      const equipped = readEquipped() === skin.id;
       const cost = price(skin);
-      const affordable = coins >= cost;
+      const affordable = readCoins() >= cost;
 
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'skin-row-v3 compact';
-      btn.classList.add(isOwned ? 'ms-v3-owned' : 'ms-v3-locked');
-      if(isEquipped) btn.classList.add('ms-v3-equipped', 'equipped');
+      btn.classList.add(owned ? 'ms-v3-owned' : 'ms-v3-locked');
+      if(equipped) btn.classList.add('ms-v3-equipped', 'equipped');
+      btn.setAttribute('data-skin-id', skin.id);
 
       btn.innerHTML = `
         <span>${skin.name || skin.id}</span>
-        <em>${isEquipped ? t('equipped') : isOwned ? t('owned') : affordable ? t('buy') + cost + ' 🪙' : t('locked') + cost + ' 🪙'}</em>`;
+        <em>${equipped ? shopText('equipped') : owned ? shopText('owned') : affordable ? shopText('buy') + cost + ' 🪙' : shopText('locked') + cost + ' 🪙'}</em>`;
 
-      btn.onclick = function(e){
+      btn.addEventListener('mouseenter', () => { if(typeof updateSkinPreviewV3 === 'function') updateSkinPreviewV3(skin); });
+      btn.addEventListener('focus', () => { if(typeof updateSkinPreviewV3 === 'function') updateSkinPreviewV3(skin); });
+      btn.addEventListener('click', e => {
         e.preventDefault();
         if(typeof updateSkinPreviewV3 === 'function') updateSkinPreviewV3(skin);
         window.buyOrEquipSkinV3(skin);
-        return false;
-      };
-      btn.onmouseenter = function(){ if(typeof updateSkinPreviewV3 === 'function') updateSkinPreviewV3(skin); };
-      btn.onfocus = btn.onmouseenter;
+      });
 
       list.appendChild(btn);
 
@@ -6873,21 +6967,19 @@ function showDailyPopup(text, reward){
         setTimeout(() => updateSkinPreviewV3(skin), 0);
       }
     });
+
+    removeResetControls();
   };
 
-  sync();
+  installCleanShop();
 
-  // Copy gameplay-earned coins into the clean key.
-  setInterval(function(){
-    if(typeof state !== 'undefined'){
-      const current = readCoins();
-      const gameCoins = cleanCoins(state.coins || 0);
-      if(gameCoins > current) writeCoins(gameCoins);
-    }
-  }, 500);
+  document.addEventListener('DOMContentLoaded', function(){
+    syncState();
+    removeResetControls();
+    if(typeof window.renderShop === 'function') window.renderShop();
+  });
 
-  window.addEventListener('beforeunload', sync);
-  window.addEventListener('pagehide', sync);
+  window.addEventListener('beforeunload', syncState);
 })();
 
 </script>
@@ -7231,6 +7323,116 @@ function showDailyPopup(text, reward){
   }else{
     init();
   }
+})();
+
+</script>
+  <script>
+/* Electric Snake COIN_EARN_SAVE_FIX_V1 - coin-bridge.js
+   Makes all coin systems use the same balance.
+   Fixes cases where gameplay earns coins but menu/shop reads another key.
+*/
+(function(){
+  'use strict';
+
+  const KEYS = [
+    'electric-snake-clean-coins-v1',
+    'electric-snake-simple-coins-v2',
+    'electric-snake-coins',
+    'electric-snake-v3-coins',
+    'electric-snake-total-coins',
+    'electric-snake-coin-balance'
+  ];
+
+  function storage(){
+    return window.__ES_STORAGE__ || window.localStorage;
+  }
+
+  function readNumber(key){
+    try{
+      const n = Number(storage().getItem(key));
+      return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0;
+    }catch(e){
+      return 0;
+    }
+  }
+
+  function bestCoins(){
+    let best = 0;
+    KEYS.forEach(key => { best = Math.max(best, readNumber(key)); });
+    return best;
+  }
+
+  function writeAllCoins(value){
+    const coins = Math.max(0, Math.floor(Number(value) || 0));
+    try{
+      KEYS.forEach(key => storage().setItem(key, String(coins)));
+    }catch(e){}
+    const headerCoins = document.getElementById('coins');
+    if(headerCoins) headerCoins.textContent = String(coins);
+    const menuCoins = document.getElementById('menuCoins');
+    if(menuCoins) menuCoins.textContent = String(coins);
+    return coins;
+  }
+
+  function syncCoins(){
+    return writeAllCoins(bestCoins());
+  }
+
+  function wrapStorageSetItem(){
+    const s = storage();
+    if(!s || s.__coinBridgeWrapped) return;
+
+    const oldSetItem = s.setItem.bind(s);
+    s.setItem = function(key, value){
+      const result = oldSetItem(key, value);
+      if(KEYS.includes(String(key))){
+        const coins = Math.max(bestCoins(), Math.max(0, Math.floor(Number(value) || 0)));
+        KEYS.forEach(k => {
+          if(k !== String(key)) oldSetItem(k, String(coins));
+        });
+        const headerCoins = document.getElementById('coins');
+        if(headerCoins) headerCoins.textContent = String(coins);
+        const menuCoins = document.getElementById('menuCoins');
+        if(menuCoins) menuCoins.textContent = String(coins);
+      }
+      return result;
+    };
+
+    s.__coinBridgeWrapped = true;
+  }
+
+  function wrapFn(name){
+    const old = window[name];
+    if(typeof old !== 'function' || old.__coinBridgeWrapped) return;
+    const wrapped = function(){
+      const result = old.apply(this, arguments);
+      setTimeout(syncCoins, 0);
+      setTimeout(syncCoins, 100);
+      return result;
+    };
+    wrapped.__coinBridgeWrapped = true;
+    window[name] = wrapped;
+  }
+
+  function init(){
+    wrapStorageSetItem();
+    syncCoins();
+    wrapFn('renderShop');
+    wrapFn('updateUI');
+    wrapFn('finalOpenMenu');
+    wrapFn('saveCoins');
+    wrapFn('saveCoinsV10');
+    setTimeout(syncCoins, 250);
+    setTimeout(syncCoins, 1000);
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+  window.electricSnakeSyncCoins = syncCoins;
 })();
 
 </script>
