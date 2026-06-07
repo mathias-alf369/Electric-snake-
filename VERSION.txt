@@ -1,5 +1,0 @@
-# Electric Snake
-
-My first indie game project made with JavaScript and ChatGPT.
-
-Includes level unlocks, coins, shop, skins, Danish/English toggle, Endless Storm and original background music.
