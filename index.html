@@ -7604,6 +7604,366 @@ function showDailyPopup(text, reward){
 })();
 </script>
 
+
+<script>
+/* SINGLE_GITHUB_ECONOMY_FIXED_V1
+   Final economy authority:
+   - Purchases save coins + owned skins together.
+   - Uses one authoritative coin key for shop purchases.
+   - Prevents old "highest coin key wins" behavior from refunding purchases.
+*/
+(function(){
+  'use strict';
+
+  const AUTH = {
+    coins: 'electric-snake-authority-coins-v1',
+    owned: 'electric-snake-authority-owned-skins-v1',
+    equipped: 'electric-snake-authority-equipped-skin-v1',
+    init: 'electric-snake-authority-economy-init-v1'
+  };
+
+  const COIN_KEYS = [
+    'electric-snake-authority-coins-v1',
+    'electric-snake-clean-coins-v1',
+    'electric-snake-simple-coins-v2',
+    'electric-snake-coins',
+    'electric-snake-v3-coins',
+    'electric-snake-total-coins',
+    'electric-snake-coin-balance'
+  ];
+
+  const OWNED_KEYS = [
+    'electric-snake-authority-owned-skins-v1',
+    'electric-snake-clean-owned-skins-v1',
+    'electric-snake-clean-owned-skins-v2',
+    'electric-snake-owned-skins'
+  ];
+
+  function store(){ return window.__ES_STORAGE__ || window.localStorage; }
+
+  function cleanCoins(v){
+    const n = Number(v);
+    if(!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.min(999999999, Math.floor(n)));
+  }
+
+  function get(key, fallback){
+    try{
+      const v = store().getItem(key);
+      return v == null ? fallback : v;
+    }catch(e){ return fallback; }
+  }
+
+  function setRaw(key, value){
+    try{ store().setItem(key, String(value)); }catch(e){}
+  }
+
+  function jget(key, fallback){
+    try{
+      const raw = store().getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    }catch(e){ return fallback; }
+  }
+
+  function jset(key, value){
+    try{ store().setItem(key, JSON.stringify(value)); }catch(e){}
+  }
+
+  function skinList(){
+    return (typeof SKINS !== 'undefined' && Array.isArray(SKINS) && SKINS.length)
+      ? SKINS
+      : [];
+  }
+
+  function validSkinIds(){
+    const ids = skinList().map(s => s && s.id).filter(Boolean);
+    if(!ids.includes('neon')) ids.unshift('neon');
+    return ids;
+  }
+
+  function cleanOwned(list){
+    const valid = validSkinIds();
+    let owned = Array.isArray(list) ? list : ['neon'];
+    owned = owned.filter(id => typeof id === 'string' && valid.includes(id));
+    owned = Array.from(new Set(owned));
+    if(!owned.includes('neon')) owned.unshift('neon');
+    return owned;
+  }
+
+  function suspiciousAllUnlocked(list){
+    const valid = validSkinIds();
+    const owned = cleanOwned(list);
+    return valid.length > 3 && owned.length >= valid.length;
+  }
+
+  function migrateInitialCoins(){
+    if(get(AUTH.init, null) === '1') return cleanCoins(get(AUTH.coins, 0));
+
+    let best = 0;
+    COIN_KEYS.forEach(key => {
+      best = Math.max(best, cleanCoins(get(key, 0)));
+    });
+
+    setRaw(AUTH.coins, best);
+    setRaw(AUTH.init, '1');
+    return best;
+  }
+
+  function readCoins(){
+    const existing = get(AUTH.coins, null);
+    if(existing == null) return migrateInitialCoins();
+    return cleanCoins(existing);
+  }
+
+  function writeCoins(coins){
+    coins = cleanCoins(coins);
+    COIN_KEYS.forEach(key => setRaw(key, coins));
+
+    const header = document.getElementById('coins');
+    if(header) header.textContent = String(coins);
+
+    const menu = document.getElementById('menuCoins');
+    if(menu) menu.textContent = String(coins);
+
+    return coins;
+  }
+
+  function readOwned(){
+    let pool = [];
+
+    OWNED_KEYS.forEach(key => {
+      const value = jget(key, null);
+      if(Array.isArray(value) && !suspiciousAllUnlocked(value)){
+        pool.push(...value);
+      }
+    });
+
+    return cleanOwned(pool.length ? pool : ['neon']);
+  }
+
+  function writeOwned(owned){
+    owned = cleanOwned(owned);
+    OWNED_KEYS.forEach(key => jset(key, owned));
+    return owned;
+  }
+
+  function readEquipped(){
+    const owned = readOwned();
+    const eq = get(AUTH.equipped, get('electric-snake-equipped-skin', 'neon'));
+    return owned.includes(eq) ? eq : 'neon';
+  }
+
+  function writeEquipped(id){
+    const owned = readOwned();
+    const eq = owned.includes(id) ? id : 'neon';
+    setRaw(AUTH.equipped, eq);
+    setRaw('electric-snake-equipped-skin', eq);
+    setRaw('electric-snake-clean-equipped-skin-v1', eq);
+    return eq;
+  }
+
+  function syncState(){
+    const coins = writeCoins(readCoins());
+    const owned = writeOwned(readOwned());
+    const equipped = writeEquipped(readEquipped());
+
+    try{
+      if(typeof state !== 'undefined'){
+        state.coins = coins;
+        state.ownedSkins = owned.slice();
+        state.equippedSkin = equipped;
+      }
+    }catch(e){}
+
+    return {coins, owned, equipped};
+  }
+
+  function shopLang(){
+    try{ return localStorage.getItem('electric-snake-language-v1') === 'en' ? 'en' : 'da'; }
+    catch(e){ return 'da'; }
+  }
+
+  function t(key){
+    const lang = shopLang();
+    const dict = {
+      da: {
+        equipped:'Valgt ✅',
+        owned:'Ejet — tryk for at vælge',
+        buy:'Køb ',
+        locked:'Låst ',
+        lockedNeed:'Låst — mangler ',
+        coins:' coins 🪙',
+        bought:'Købt ✅',
+        note:'Ren shop: køb låser op, ejede skins kan vælges, låste skins kan ikke bruges gratis.'
+      },
+      en: {
+        equipped:'Equipped ✅',
+        owned:'Owned — tap to equip',
+        buy:'Buy ',
+        locked:'Locked ',
+        lockedNeed:'Locked — need ',
+        coins:' coins 🪙',
+        bought:'Bought ✅',
+        note:'Clean shop: buying unlocks, owned skins can be equipped, locked skins cannot be used for free.'
+      }
+    };
+    return (dict[lang] && dict[lang][key]) || dict.da[key] || key;
+  }
+
+  function price(skin){
+    if(!skin || skin.id === 'neon') return 0;
+    return cleanCoins(skin.price || 0);
+  }
+
+  function message(text, color, ms){
+    if(typeof addCenterMessage === 'function'){
+      addCenterMessage(text, color || '#22c55e', ms || 900);
+    }
+  }
+
+  window.electricSnakeEconomySync = syncState;
+
+  window.saveCoins = function(){ writeCoins(readCoins()); };
+  window.saveCoinsV10 = window.saveCoins;
+
+  window.saveSkinEconomyV3 = function(){
+    writeOwned(readOwned());
+    writeEquipped(readEquipped());
+    writeCoins(readCoins());
+  };
+
+  window.saveSkins = window.saveSkinEconomyV3;
+
+  window.skinOwnedV3 = function(skin){
+    if(!skin || !skin.id) return false;
+    return readOwned().includes(skin.id);
+  };
+
+  window.currentSkin = function(){
+    const id = readEquipped();
+    return skinList().find(s => s.id === id) || skinList()[0];
+  };
+
+  window.buyOrEquipSkinV3 = function(skin){
+    if(!skin || !skin.id) return;
+
+    const ids = validSkinIds();
+    if(!ids.includes(skin.id)){
+      message('Invalid skin', '#f87171', 900);
+      return;
+    }
+
+    let coins = readCoins();
+    let owned = readOwned();
+    const cost = price(skin);
+
+    if(owned.includes(skin.id)){
+      writeEquipped(skin.id);
+      syncState();
+      message(t('equipped'), '#22c55e', 700);
+      if(typeof window.renderShop === 'function') window.renderShop();
+      if(typeof updateUI === 'function') updateUI();
+      return;
+    }
+
+    if(coins < cost){
+      message(t('lockedNeed') + (cost - coins) + t('coins'), '#facc15', 1100);
+      if(typeof window.renderShop === 'function') window.renderShop();
+      return;
+    }
+
+    // Atomic purchase: new coins and new owned list are written together.
+    coins = coins - cost;
+    owned = cleanOwned([...owned, skin.id]);
+
+    writeCoins(coins);
+    writeOwned(owned);
+    writeEquipped(skin.id);
+    syncState();
+
+    message(t('bought'), '#22c55e', 1000);
+    if(typeof window.renderShop === 'function') window.renderShop();
+    if(typeof updateUI === 'function') updateUI();
+  };
+
+  const oldRenderShop = window.renderShop;
+  window.renderShop = function(){
+    const menu = document.getElementById('shopMenu');
+    if(!menu || !skinList().length){
+      if(typeof oldRenderShop === 'function') return oldRenderShop.apply(this, arguments);
+      return;
+    }
+
+    syncState();
+    menu.innerHTML = '';
+
+    const top = document.createElement('div');
+    top.className = 'simple-shop-card';
+    top.innerHTML = `
+      <div class="simple-shop-top">
+        <strong>Shop</strong>
+        <span>Coins: <b>${readCoins()}</b> 🪙</span>
+      </div>
+      <div class="ms-v3-shop-note">${t('note')}</div>`;
+    menu.appendChild(top);
+
+    const preview = document.createElement('div');
+    preview.className = 'skin-preview-v3';
+    preview.innerHTML = `
+      <div class="skin-preview-v3-info">
+        <strong id="skinPreviewV3Title">Neon Pulse</strong>
+        <span id="skinPreviewV3Meta">Starter-skin</span>
+      </div>
+      <canvas id="skinPreviewV3Canvas" width="240" height="78"></canvas>`;
+    menu.appendChild(preview);
+
+    const list = document.createElement('div');
+    list.className = 'skin-list-v3 compact';
+    menu.appendChild(list);
+
+    const coins = readCoins();
+    const owned = readOwned();
+    const equipped = readEquipped();
+
+    skinList().forEach((skin, index) => {
+      const isOwned = owned.includes(skin.id);
+      const isEquipped = equipped === skin.id;
+      const cost = price(skin);
+      const affordable = coins >= cost;
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'skin-row-v3 compact';
+      btn.classList.add(isOwned ? 'ms-v3-owned' : 'ms-v3-locked');
+      if(isEquipped) btn.classList.add('ms-v3-equipped', 'equipped');
+
+      btn.innerHTML = `
+        <span>${skin.name || skin.id}</span>
+        <em>${isEquipped ? t('equipped') : isOwned ? t('owned') : affordable ? t('buy') + cost + ' 🪙' : t('locked') + cost + ' 🪙'}</em>`;
+
+      btn.addEventListener('mouseenter', () => { if(typeof updateSkinPreviewV3 === 'function') updateSkinPreviewV3(skin); });
+      btn.addEventListener('focus', () => { if(typeof updateSkinPreviewV3 === 'function') updateSkinPreviewV3(skin); });
+      btn.addEventListener('click', e => {
+        e.preventDefault();
+        if(typeof updateSkinPreviewV3 === 'function') updateSkinPreviewV3(skin);
+        window.buyOrEquipSkinV3(skin);
+      });
+
+      list.appendChild(btn);
+      if(index === 0 && typeof updateSkinPreviewV3 === 'function'){
+        setTimeout(() => updateSkinPreviewV3(skin), 0);
+      }
+    });
+  };
+
+  // Initial sync.
+  migrateInitialCoins();
+  syncState();
+  setTimeout(syncState, 250);
+  setTimeout(syncState, 1000);
+})();
+</script>
+
 </body>
 
 </html>
